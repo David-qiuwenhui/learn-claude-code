@@ -50,6 +50,7 @@ if os.getenv("ANTHROPIC_BASE_URL"):
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
+# 系统级提示词
 SYSTEM = f"You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain."
 
 # ── 工具定义：仅 bash ────────────────────────────
@@ -66,14 +67,18 @@ TOOLS = [{
 
 # ── 工具执行 ────────────────────────────────────────
 def run_bash(command: str) -> str:
+    # 安全检查：禁止执行极其危险的命令
     dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
     if any(d in command for d in dangerous):
         return "Error: Dangerous command blocked"
+
+    # 执行命令，捕获输出和错误，限制输出长度和执行时间
     try:
         r = subprocess.run(command, shell=True, cwd=os.getcwd(),
                            capture_output=True, text=True, timeout=120)
         out = (r.stdout + r.stderr).strip()
         return out[:50000] if out else "(no output)"
+
     except subprocess.TimeoutExpired:
         return "Error: Timeout (120s)"
     except (FileNotFoundError, OSError) as e:
@@ -123,10 +128,14 @@ if __name__ == "__main__":
             query = input("\033[36ms01 >> \033[0m")
         except (EOFError, KeyboardInterrupt):
             break
+
+        # EOF（Ctrl+D）或 Ctrl+C 退出
         if query.strip().lower() in ("q", "exit", ""):
             break
+        # 将用户输入追加到对话历史，并调用 Agent 循环
         history.append({"role": "user", "content": query})
         agent_loop(history)
+
         # 打印模型的最终文本回复
         response_content = history[-1]["content"]
         if isinstance(response_content, list):
